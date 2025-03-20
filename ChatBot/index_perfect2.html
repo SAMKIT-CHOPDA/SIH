@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Image Analyzer</title>
+</head>
+<body>
+    <h1>Image Analysis and Object Detection</h1>
+    <form method="POST" action="/" enctype="multipart/form-data">
+        <input type="file" name="file" accept="image/*" required>
+        <button type="submit">Upload Image</button>
+    </form>
+
+    {% if image_path %}
+        <h2>Uploaded Image:</h2>
+        <img src="{{ url_for('static', filename='uploads/' + image_path) }}" alt="Uploaded Image" width="300px">
+        <h2>Detected Objects:</h2>
+        <ul>
+            {% for obj in detected_objects %}
+                <li>{{ obj }}</li>
+            {% endfor %}
+        </ul>
+    {% endif %}
+
+    {% if show_question_section %}
+        <h2>Ask a Question About the Image:</h2>
+        <form method="POST" action="/ask">
+            <input type="text" name="question" placeholder="Ask a question" required>
+            <button type="submit">Ask</button>
+        </form>
+    {% endif %}
+
+    {% if answer %}
+        <h3>Answer: {{ answer }}</h3>
+    {% endif %}
+
+</body>
+</html>

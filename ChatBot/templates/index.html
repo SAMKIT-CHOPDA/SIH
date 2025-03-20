@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Upload and Analyze Image</title>
+</head>
+<body>
+    <h1>Upload an Image for Analysis</h1>
+
+    <!-- Step 1: Upload form for image -->
+    <form method="POST" action="/" enctype="multipart/form-data">
+        <input type="file" name="image" required><br><br>
+        <input type="submit" value="Upload Image">
+    </form>
+
+    <!-- Step 2: Show uploaded image and allow user to ask a question -->
+    {% if image_url %}
+        <h2>Uploaded Image:</h2>
+        <img src="{{ image_url }}" alt="Uploaded Image" style="max-width: 100%;"><br><br>
+
+        <form method="POST" action="/">
+            <label for="question">Ask a question about the image:</label><br>
+            <input type="text" name="question" id="question" required><br><br>
+            <input type="submit" value="Ask">
+        </form>
+    {% endif %}
+
+    <!-- Step 3: Display detected objects and answer -->
+    {% if objects %}
+        <h2>Detected Objects:</h2>
+        <ul>
+            {% for obj in objects.objects %}
+                <li>{{ obj }}</li>
+            {% endfor %}
+        </ul>
+    {% endif %}
+
+    {% if answer %}
+        <h2>Question: {{ question }}</h2>
+        <p>Answer: {{ answer }}</p>
+    {% endif %}
+
+    <!-- Display flash messages -->
+    {% with messages = get_flashed_messages() %}
+        {% if messages %}
+            <ul>
+                {% for message in messages %}
+                    <li>{{ message }}</li>
+                {% endfor %}
+            </ul>
+        {% endif %}
+    {% endwith %}
+</body>
+</html>

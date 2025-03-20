@@ -1,0 +1,227 @@
+import os
+from flask import Flask, request, render_template, session, flash
+import face_recognition
+import torch
+from PIL import Image, UnidentifiedImageError
+from transformers import pipeline
+import torchvision.transforms as transforms
+import cv2
+import numpy as np
+import wikipediaapi
+
+app = Flask(__name__)
+app.secret_key = "OmO\x9dj'La\xf0D\x1a\xd4\xe82Bi\x0bmv\x97R0\xdal"
+
+UPLOAD_FOLDER = 'static/uploads'
+FAMOUS_PEOPLE_FOLDER = 'famous_people'
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+
+# Load YOLO model for general object detection (animals, birds, mythical creatures, etc.)
+yolo_model = torch.hub.load('ultralytics/yolov5', 'yolov5s')
+
+# Load a pre-trained model for animal/bird/mythical creature classification
+classification_model = torch.hub.load('pytorch/vision:v0.10.0', 'resnet50', pretrained=True)
+classification_model.eval()
+
+# Use a label mapping for specific classes (animals, birds, creatures)
+LABELS = {
+    365: 'lion', 366: 'tiger', 377: 'griffin', 384: 'dragon', 385: 'phoenix', 21: 'sparrow', 89: 'eagle'
+}
+
+# Initialize question-answering model (NLP) for answering questions based on image content
+qa_model = pipeline("question-answering", model="distilbert-base-cased-distilled-squad")
+
+
+# Helper function to classify the question type
+def classify_question(question):
+    image_keywords = ['color', 'wearing', 'see', 'appear', 'hold', 'visible', 'pose', 'background']
+    for keyword in image_keywords:
+        if keyword in question.lower():
+            return "image"
+    return "general"
+
+
+# Function to detect color of objects in the image
+def detect_color(image_path, object_coordinates=None):
+    image = cv2.imread(image_path)
+    if object_coordinates:
+        x, y, w, h = object_coordinates
+        image = image[y:h, x:w]
+
+    image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+    mean_color = cv2.mean(image_rgb)[:3]
+    return get_color_name(mean_color)
+
+
+# Helper function to convert RGB to human-readable color name
+def get_color_name(mean_color):
+    r, g, b = mean_color
+    if r > 200 and g > 200 and b > 200:
+        return "white"
+    elif r > 150 and g < 100 and b < 100:
+        return "red"
+    elif r < 100 and g > 150 and b < 100:
+        return "green"
+    elif r < 100 and g < 100 and b > 150:
+        return "blue"
+    elif r > 150 and g > 150 and b < 100:
+        return "yellow"
+    elif r < 50 and g < 50 and b < 50:
+        return "black"
+    else:
+        return "unknown"
+
+
+# Function to detect general objects using YOLO
+def detect_general_objects(image_path):
+    image = Image.open(image_path)
+    results = yolo_model(image)
+    detected_objects = results.pandas().xyxy[0]['name'].unique().tolist()
+    return detected_objects
+
+
+# Function to detect specific animals, birds, and creatures using a pre-trained classification model
+def detect_specific_animals_birds_creatures(image_path):
+    image = Image.open(image_path).convert("RGB")
+    transform = transforms.Compose([transforms.Resize((224, 224)), transforms.ToTensor()])
+    transformed_image = transform(image).unsqueeze(0)
+    output = classification_model(transformed_image)
+    _, predicted_class = torch.max(output, 1)
+    return LABELS.get(predicted_class.item(), "unknown")
+
+
+# Function to detect faces in an image
+def detect_faces(image_path):
+    image = face_recognition.load_image_file(image_path)
+    face_locations = face_recognition.face_locations(image)
+    return face_locations
+
+
+# Function to load and encode famous people images
+def load_famous_people():
+    famous_people_encodings = []
+    famous_people_names = []
+
+    for file_name in os.listdir(FAMOUS_PEOPLE_FOLDER):
+        if file_name.endswith('.jpg') or file_name.endswith('.png'):
+            image_path = os.path.join(FAMOUS_PEOPLE_FOLDER, file_name)
+            image = face_recognition.load_image_file(image_path)
+            encoding = face_recognition.face_encodings(image)[0]
+            famous_people_encodings.append(encoding)
+            famous_people_names.append(os.path.splitext(file_name)[0])
+
+    return famous_people_encodings, famous_people_names
+
+
+# Function to detect and recognize famous people in an image
+def detect_famous_people(image_path):
+    famous_people_encodings, famous_people_names = load_famous_people()
+    image = face_recognition.load_image_file(image_path)
+    face_encodings = face_recognition.face_encodings(image)
+    detected_famous_people = []
+    for face_encoding in face_encodings:
+        matches = face_recognition.compare_faces(famous_people_encodings, face_encoding)
+        if True in matches:
+            match_index = matches.index(True)
+            detected_famous_people.append(famous_people_names[match_index])
+
+    return detected_famous_people
+
+
+# Function to retrieve Wikipedia summary for an object/person
+def get_wikipedia_summary(object_name):
+    try:
+        wiki_wiki = wikipediaapi.Wikipedia(language='en', user_agent='ImageRecognitionBot/1.0')
+        page = wiki_wiki.page(object_name)
+        if page.exists():
+            return page.summary
+        else:
+            return None
+    except Exception as e:
+        print(f"Error retrieving Wikipedia content for {object_name}: {e}")
+        return None
+
+
+# Answer questions based on detected objects
+def answer_question(question, detected_objects, image_path=None):
+    question_type = classify_question(question)
+    if question_type == "image":
+        if "color" in question.lower():
+            color_answer = detect_color(image_path)
+            return f"The color is {color_answer}."
+        else:
+            return "Unable to analyze the image for the given question."
+    else:
+        combined_context = ""
+        for obj in detected_objects:
+            summary = get_wikipedia_summary(obj)
+            if summary:
+                combined_context += f"{obj}: {summary}\n"
+        if combined_context:
+            qa_input = {'question': question, 'context': combined_context}
+            answer = qa_model(qa_input)
+            return answer['answer']
+        else:
+            return "No relevant information found for your question."
+
+
+# Analyze image and detect objects
+def analyze_image(image_path):
+    famous_people = detect_famous_people(image_path)  # Famous people detection
+    general_objects = detect_general_objects(image_path)
+    specific_entity = detect_specific_animals_birds_creatures(image_path)
+    detected_objects = famous_people + general_objects + ([specific_entity] if specific_entity != "unknown" else [])
+    return detected_objects
+
+
+@app.route("/", methods=["GET", "POST"])
+def index():
+    if request.method == "POST":
+        if 'file' in request.files:
+            image = request.files["file"]
+            if image:
+                try:
+                    image_path = os.path.join(UPLOAD_FOLDER, image.filename)
+                    image.save(image_path)
+                    detected_objects = analyze_image(image_path)
+                    session['image_path'] = image_path
+                    session['detected_objects'] = detected_objects
+                    return render_template("index.html", image_path=image.filename, show_question_section=True,
+                                           detected_objects=detected_objects)
+                except UnidentifiedImageError:
+                    flash("Invalid image file format.")
+                    return render_template("index.html", show_question_section=False)
+            else:
+                flash("No image selected.")
+                return render_template("index.html", show_question_section=False)
+
+    image_path = session.get('image_path')
+    detected_objects = session.get('detected_objects')
+    if image_path and detected_objects:
+        return render_template("index.html", image_path=os.path.basename(image_path), show_question_section=True,
+                               detected_objects=detected_objects)
+    else:
+        return render_template("index.html", show_question_section=False)
+
+
+@app.route("/ask", methods=["POST"])
+def ask():
+    question = request.form.get("question")
+    image_path = session.get('image_path')
+    detected_objects = session.get('detected_objects')
+
+    if not image_path or not detected_objects:
+        flash("No image has been uploaded or analyzed yet. Please upload an image first.")
+        return render_template("index.html", show_question_section=False)
+
+    if question:
+        answer = answer_question(question, detected_objects, image_path)
+        return render_template("index.html", image_path=os.path.basename(image_path),
+                               detected_objects=detected_objects, show_question_section=True, answer=answer)
+    else:
+        flash("Please ask a question.")
+        return render_template("index.html", show_question_section=True)
+
+
+if __name__ == "__main__":
+    app.run(host='0.0.0.0',port=5000)

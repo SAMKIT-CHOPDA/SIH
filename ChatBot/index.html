@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Upload and Analyze Image</title>
+</head>
+<body>
+
+<h1>Upload and Analyze Image</h1>
+
+<form action="/" method="POST" enctype="multipart/form-data">
+    <label for="file">Choose File</label>
+    <input type="file" name="file" id="file" required>
+    <button type="submit">Upload Image</button>
+</form>
+
+{% if image_path %}
+    <h2>Uploaded Image:</h2>
+    <img src="{{ url_for('static', filename='uploads/' ~ image_path) }}" alt="Uploaded Image" style="max-width: 300px;">
+    <p><strong>Image Caption:</strong> {{ caption }}</p>
+
+    <h2>Ask a Question About the Object in the Image:</h2>
+    <form action="/ask" method="POST">
+        <input type="text" name="question" placeholder="Ask a question about the object (e.g., lifespan, discovery, birthdate, etc.)..." required>
+        <button type="submit">Ask</button>
+    </form>
+    
+    {% if answer %}
+        <h3>Answer:</h3>
+        <p>{{ answer }}</p>
+    {% endif %}
+{% endif %}
+
+</body>
+</html>
