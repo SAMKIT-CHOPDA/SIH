@@ -52,3 +52,6 @@ To design and implement a scalable, cost-effective traffic signal system that:
 
 3. Run Raspberry Pi controller script:
      python3 main_controller.py
+
+## 🔄 Demo Link
+      https://drive.google.com/file/d/10y4O3v_hkpO9UXrEuGUjy_LbNhyHB4bz/view?usp=sharing
