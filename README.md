@@ -6,7 +6,7 @@ An intelligent real-time traffic management system designed for Smart India Hack
 
 - **Name:** AI Traffic Signal Management System
 - **Event:** Smart India Hackathon 2024 (SIH)
-- **Category:** Smart Transportation / Smart City
+- **Category:** Smart Automation
 - **Status:** Completed
 
 ## 🎯 Objective
